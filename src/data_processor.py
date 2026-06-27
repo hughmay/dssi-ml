@@ -1,5 +1,5 @@
 """
-This module contains the various procedures for processing data.
+This module contains the various procedures for processing the Iris dataset.
 """
 
 import argparse
@@ -8,6 +8,7 @@ import pandas as pd
 import logging
 
 logging.basicConfig(level=logging.INFO)
+
 
 def load_data(data_path):
     """
@@ -20,6 +21,7 @@ def load_data(data_path):
     df = pd.read_csv(data_path)
     return df
 
+
 def save_data(data_path, df):
     """
     Save data to directory.
@@ -29,50 +31,28 @@ def save_data(data_path, df):
         Returns:
             None: No returns required
     """
-    df.to_csv(data_path.replace('.csv','_processed.csv'), index=False)
+    df.to_csv(data_path.replace('.csv', '_processed.csv'), index=False)
     return None
 
-def log_txf(df, cols: list):
-    """
-    Perform log transformation on specified columns in dataset.
-        Parameters:
-            df: input dataframe
-            cols (list): columns that need log transformation
-        Returns:
-            df: resultant dataframe containing newly transformed columns
-    """
-    for col in cols:
-        df[col] = df[col].clip(lower=0)
-        df['log_'+col] = np.log(df[col]+1)
-    return df
-
-def remap_dependents(x):
-    """
-    Convert no_of_dependents into categorical variable.
-        Parameters:
-            x (int): Input category
-        Returns:
-            New category in (str)
-    """
-    if x == 0:
-        return 'no_dep'
-    if x == 1:
-        return '1_dep'
-    if x > 1 and x <= 3:
-        return '2_to_3_dep'
-    return 'more_than_3_dep'
 
 def preprocess(df):
     """
-    Orchestrate data pre-processing procedures.
+    Orchestrate data pre-processing procedures for Iris data.
         Parameters:
             df: Input dataframe to be pre-processed
         Returns:
             df: Resultant dataframe after pre-processing
     """
-    df = log_txf(df, ['residential_assets_value','loan_amount'])
-    df['dep_cat'] = df['no_of_dependents'].map(remap_dependents)
+    # Clean up column names to ensure there are no leading/trailing whitespaces
+    df.columns = df.columns.str.strip()
+
+    # You can add Iris-specific feature engineering here if required by your course.
+    # For example, creating a ratios feature:
+    # if 'PetalLengthCm' in df.columns and 'PetalWidthCm' in df.columns:
+    #     df['PetalRatio'] = df['PetalLengthCm'] / df['PetalWidthCm']
+
     return df
+
 
 def run(data_path):
     """
@@ -90,6 +70,7 @@ def run(data_path):
     save_data(data_path, df)
     logging.info('Completed')
     return df
+
 
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser()

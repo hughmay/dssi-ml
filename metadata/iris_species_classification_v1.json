@@ -1,0 +1,10 @@
+{
+    "name": "iris_species_classification",
+    "metrics": {
+        "accuracy": 1.0
+    },
+    "version": 1,
+    "registration_date": "2026-06-27T15:56:11.325995",
+    "model": "iris_species_classification_model_v1.joblib",
+    "features": "iris_species_classification_features_v1.joblib"
+}

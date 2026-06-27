@@ -1,5 +1,5 @@
 """
-This module automates model training.
+This module automates model training for the Iris classification dataset.
 """
 
 import argparse
@@ -7,9 +7,10 @@ import logging
 
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, MinMaxScaler
+from sklearn.preprocessing import OneHotEncoder
 from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
+# CHANGED: Swapped LinearRegression out for a Classifier
+from sklearn.linear_model import LogisticRegression 
 
 from src import data_processor
 from src import model_registry
@@ -18,12 +19,12 @@ from src.config import appconfig
 
 logging.basicConfig(level=logging.INFO)
 
+# Extract configurations safely
 features = appconfig['Model']['features'].split(',')
-categorical_features = appconfig['Model']['categorical_features'].split(',')
-numerical_features = appconfig['Model']['numerical_features'].split(',')
+# Safely handle if categorical features are empty for Iris
+categorical_features_str = appconfig['Model'].get('categorical_features', '')
+categorical_features = [f for f in categorical_features_str.split(',') if f]
 label = appconfig['Model']['label']
-fdr_max = float(appconfig['Evaluation']['fdr'])
-recall_min = float(appconfig['Evaluation']['recall'])
 
 def run(data_path):
     """
@@ -36,42 +37,54 @@ def run(data_path):
     logging.info('Process Data...')
     df = data_processor.run(data_path)
     
-    numerical_transformer = MinMaxScaler()
-    categorical_transformer = OneHotEncoder(handle_unknown="ignore")
+    # Refined Preprocessor: Iris features are numerical, but we keep 
+    # OneHotEncoder infrastructure in case your CSV pipeline injects categorical keys.
+    transformers = []
+    if categorical_features:
+        categorical_transformer = OneHotEncoder(handle_unknown="ignore")
+        transformers.append(("cat", categorical_transformer, categorical_features))
+    
     preprocessor = ColumnTransformer(
-        transformers=[
-            ("num", numerical_transformer, numerical_features),
-            ("cat", categorical_transformer, categorical_features),
-        ]
+        transformers=transformers, 
+        remainder='passthrough'
     )
     
     # Train-Test Split
     logging.info('Start Train-Test Split...')
-    X_train, X_test, y_train, y_test = train_test_split(df[features], \
-                                                        df[label], \
-                                                        test_size=appconfig.getfloat('Model','test_size'), \
-                                                        random_state=0)
+    X_train, X_test, y_train, y_test = train_test_split(
+        df[features], 
+        df[label], 
+        test_size=appconfig.getfloat('Model', 'test_size'), 
+        random_state=0
+    )
     
     # Train Classifier
-    logging.info('Start Training...')
-    random_forest = RandomForestClassifier(n_estimators=appconfig.getint('Hyperparameters','rf_n_estimators'),
-                                           max_depth=appconfig.getint('Hyperparameters','rf_max_depth'), 
-                                           class_weight = appconfig.get('Hyperparameters','rf_class_weight'),
-                                           n_jobs=appconfig.getint('Hyperparameters','rf_n_jobs'))
+    logging.info('Start Training Classification Model...')
+    # CHANGED: Using LogisticRegression with a max_iter ceiling for stability
+    clf = LogisticRegression(max_iter=200, random_state=0)
     
-    clf = Pipeline(steps=[("preprocessor", preprocessor),\
-                          ("binary_classifier", random_forest)
-                         ])
-    clf.fit(X_train, y_train)
+    # CHANGED: Updated step name from "regression" to "classification"
+    pipeline = Pipeline(steps=[
+        ("preprocessor", preprocessor),
+        ("classification", clf)
+    ])
+    pipeline.fit(X_train, y_train)
     
-    # Evaluate and Deploy
-    if evaluation.run(y_test, clf.predict(X_test)):
+    # Evaluate and Persist
+    logging.info('Evaluating model performance...')
+    predictions = pipeline.predict(X_test)
+    
+    if evaluation.run(y_test, predictions):
         logging.info('Persisting model...')
-        mdl_meta = { 'name': appconfig['Model']['name'], 'metrics': evaluation.get_eval_metrics(y_test, clf.predict(X_test)) }
-        model_registry.register(clf, features, mdl_meta)
-    
+        mdl_meta = { 
+            'name': appconfig['Model']['name'], 
+            'metrics': evaluation.get_eval_metrics(y_test, predictions) 
+        }
+        model_registry.register(pipeline, features, mdl_meta)
+
     logging.info('Training completed.')
     return None
+
 
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser()
